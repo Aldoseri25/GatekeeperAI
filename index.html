@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gatekeeper AI — The Decision Engine</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            slate: {
+              850: '#111827',
+              900: '#0f172a',
+              950: '#020617',
+            },
+            gate: {
+              execute: '#10b981',
+              ask: '#f59e0b',
+              defer: '#3b82f6',
+              escalate: '#f97316',
+              refuse: '#ef4444',
+            }
+          },
+          fontFamily: {
+            mono: ['JetBrains Mono', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <!-- React & Lucide Icons -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .code-font { font-family: 'JetBrains Mono', monospace; }
+    /* Custom scrollbar for dark tech look */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #090d16; }
+    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #334155; }
+    .grid-bg {
+      background-image: radial-gradient(rgba(51, 65, 85, 0.3) 1px, transparent 0);
+      background-size: 24px 24px;
+    }
+    @keyframes pulse-border {
+      0%, 100% { border-color: rgba(59, 130, 246, 0.4); }
+      50% { border-color: rgba(59, 130, 246, 0.9); }
+    }
+    .pulse-blue { animation: pulse-border 2s infinite; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen grid-bg selection:bg-cyan-500 selection:text-slate-950">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useRef } = React;
+
+    const DOMAINS = [
+      {
+        id: 'customer_data',
+        name: 'Customer Data / DB Admin',
+        icon: 'database',
+        scenarios: [
+          {
+            id: 'sc_del_500',
+            title: 'Delete 500 Inactive Customer Records',
+            actionType: 'DELETE_RECORDS',
+            target: 'users_table_prod',
+            params: { count: 500, criteria: 'last_login < 2024-01-01', requesterRole: 'Automated_Cleanup_Bot' },
+            reversibility: 0.15,
+            evidence: ['Retention policy #402', 'Automated monthly cleanup cron schedule'],
+            costOfFailure: '$450,000 (Data Loss / GDPR non-compliance / Legal)',
+            recommendedVerdict: 'ASK',
+            description: 'Destructive deletion request on live database tables targeting a high batch volume.'
+          },
+          {
+            id: 'sc_anonymize_user',
+            title: 'Anonymize Single GDPR Request (User #8942)',
+            actionType: 'ANONYMIZE_USER',
+            target: 'user_id_8942',
+            params: { userId: 8942, tickets: ['GDPR-8819'], requesterRole: 'Support_Tier_2' },
+            reversibility: 0.05,
+            evidence: ['Verified DPO Ticket #8819', 'Signed User Deletion Request Form'],
+            costOfFailure: '$50,000 (Regulatory penalty if mishandled)',
+            recommendedVerdict: 'EXECUTE',
+            description: 'Explicit legal mandate with attached DPO verification and high confidence context.'
+          }
+        ]
+      },
+      {
+        id: 'code_deploy',
+        name: 'Infrastructure & Deployments',
+        icon: 'server',
+        scenarios: [
+          {
+            id: 'sc_deploy_prod',
+            title: 'Deploy Hotfix v2.4.1 to Production',
+            actionType: 'K8S_DEPLOY',
+            target: 'prod-us-east-cluster',
+            params: { version: 'v2.4.1', canaryPercent: 10, errorRate: 0.02, requesterRole: 'CI_CD_Pipeline' },
+            reversibility: 0.85,
+            evidence: ['100% Unit tests pass', 'Staging integration pass', 'Signed commit hash'],
+            costOfFailure: '$120,000/hr (Service Downtime)',
+            recommendedVerdict: 'EXECUTE',
+            description: 'Standard deployment with active rollback capabilities and full staging automated test passing.'
+          },
+          {
+            id: 'sc_scale_down',
+            title: 'Scale Down DB Cluster Cluster-01 During Peak',
+            actionType: 'SCALE_INFRA',
+            target: 'db-cluster-primary-01',
+            params: { nodeCount: 2, currentLoad: '84%', peakHours: true, requesterRole: 'Cost_Optimizer_Agent' },
+            reversibility: 0.70,
+            evidence: ['Cloud bill savings estimate: $400/day'],
+            costOfFailure: '$2,000,000 (System Crash during Black Friday traffic)',
+            recommendedVerdict: 'REFUSE',
+            description: 'Extreme operational hazard: attempting cost savings on primary database cluster during 84% traffic load.'
+          }
+        ]
+      },
+      {
+        id: 'fintech_refund',
+        name: 'Financial Operations & Refunds',
+        icon: 'dollar-sign',
+        scenarios: [
+          {
+            id: 'sc_refund_4500',
+            title: 'Issue $4,500 VIP Wire Refund',
+            actionType: 'WIRE_REFUND',
+            target: 'acct_99210_enterprise',
+            params: { amount: 4500, currency: 'USD', accountAgeDays: 4, requesterRole: 'Chatbot_Support' },
+            reversibility: 0.0,
+            evidence: ['User chat transcript claiming double charge'],
+            costOfFailure: '$4,500 (Direct Fraud Loss)',
+            recommendedVerdict: 'ESCALATE',
+            description: 'High financial magnitude transaction requested on new account (<7 days old) by low-privilege bot.'
+          }
+        ]
+      },
+      {
+        id: 'content_mod',
+        name: 'Trust & Safety / Moderation',
+        icon: 'shield-alert',
+        scenarios: [
+          {
+            id: 'sc_ban_influencer',
+            title: 'Permanent Ban User @TechGuru (1.2M Followers)',
+            actionType: 'BAN_ACCOUNT',
+            target: 'usr_techguru_verified',
+            params: { followerCount: 1200000, violationCount: 1, toxicityScore: 0.72, requesterRole: 'AutoMod_Bot' },
+            reversibility: 0.90,
+            evidence: ['Single flagged comment reported by 3 users'],
+            costOfFailure: 'PR Backlash / Creator churn / $250k ad revenue',
+            recommendedVerdict: 'ASK',
+            description: 'High blast radius content moderation decision on high-profile account with weak evidence.'
+          }
+        ]
+      }
+    ];
+
+    // --- MAIN REACT APP COMPONENT ---
+    function App() {
+      // Active Domain & Scenario State
+      const [selectedDomain, setSelectedDomain] = useState(DOMAINS[0].id);
+      const [selectedScenarioId, setSelectedScenarioId] = useState(DOMAINS[0].scenarios[0].id);
+      
+      // Custom Editable Parameters
+      const [requesterRole, setRequesterRole] = useState('Automated_Cleanup_Bot');
+      const [evidenceCount, setEvidenceCount] = useState(2);
+      const [isFailureTestInjected, setIsFailureTestInjected] = useState(false);
+      const [failureTestType, setFailureTestType] = useState('POISONED_CONTEXT');
+
+      // Processing & Output State
+      const [isEvaluating, setIsEvaluating] = useState(false);
+      const [evaluationProgress, setEvaluationProgress] = useState(0);
+      const [activeDecision, setActiveDecision] = useState(null);
+      const [humanOverride, setHumanOverride] = useState(null);
+
+      // Audit Log
+      const [auditTrail, setAuditTrail] = useState([
+        {
+          id: 'LOG-9821-A',
+          timestamp: '2026-10-21T00:12:33Z',
+          domain: 'Infrastructure & Deployments',
+          action: 'Deploy Hotfix v2.4.1 to Production',
+          verdict: 'EXECUTE',
+          confidence: '96%',
+          riskScore: 'Low (18%)',
+          reversibility: 'High (85%)',
+          reason: 'All pre-checks passed. Canary automated verification green.',
+          status: 'COMPLETED'
+        },
+        {
+          id: 'LOG-9820-B',
+          timestamp: '2026-10-20T23:45:11Z',
+          domain: 'Customer Data / DB Admin',
+          action: 'DROP TABLE legacy_staging_logs',
+          verdict: 'REFUSE',
+          confidence: '42%',
+          riskScore: 'Critical (92%)',
+          reversibility: 'Zero (0%)',
+          reason: 'Detected active production read connections on staging alias.',
+          status: 'BLOCKED'
+        }
+      ]);
+
+      // View Modes & Modals
+      const [demoMode, setDemoMode] = useState(false);
+      const [demoStep, setDemoStep] = useState(0);
+      const [showArchModal, setShowArchModal] = useState(false);
+      const [showDeliverablesTab, setShowDeliverablesTab] = useState('failure');
+      const [selectedAuditLog, setSelectedAuditLog] = useState(null);
+
+      const currentDomainObj = useMemo(() => {
+        for (let i = 0; i < DOMAINS.length; i++) {
+          if (DOMAINS[i].id === selectedDomain) return DOMAINS[i];
+        }
+        return DOMAINS[0];
+      }, [selectedDomain]);
+
+      const currentScenario = useMemo(() => {
+        if (!currentDomainObj || !currentDomainObj.scenarios) return null;
+        const found = currentDomainObj.scenarios.find(function(s) { return s.id === selectedScenarioId; });
+        return found || currentDomainObj.scenarios[0];
+      }, [currentDomainObj, selectedScenarioId]);
+
+      // Sync scenario defaults when selection changes
+      useEffect(() => {
+        if (currentScenario && currentScenario.params) {
+          setRequesterRole(currentScenario.params.requesterRole || 'AI_Agent');
+          setEvidenceCount(currentScenario.evidence ? currentScenario.evidence.length : 1);
+          setIsFailureTestInjected(false);
+          setActiveDecision(null);
+          setHumanOverride(null);
+        }
+      }, [selectedScenarioId]);
+
+      // Initialize Icons
+      useEffect(() => {
+        if (window.lucide) {
+          window.lucide.createIcons();
+        }
+      });
+
+      // --- SIMULATION / EVALUATION LOGIC ---
+      const evaluateProposedAction = () => {
+        setIsEvaluating(true);
+        setEvaluationProgress(10);
+        setActiveDecision(null);
+        setHumanOverride(null);
+
+        let timer = setInterval(() => {
+          setEvaluationProgress(prev => {
+            if (prev >= 100) {
+              clearInterval(timer);
+              computeFinalVerdict();
+              setIsEvaluating(false);
+              return 100;
+            }
+            return prev + 25;
+          });
+        }, 180);
+      };
+
+      const computeFinalVerdict = () => {
+        let verdict = 'EXECUTE';
+        let confidence = 0.94;
+        let riskScore = 0.18;
+        let reversibility = currentScenario ? currentScenario.reversibility : 0.5;
+        let reasons = [];
+
+        if (isFailureTestInjected) {
+          if (failureTestType === 'POISONED_CONTEXT') {
+            verdict = 'REFUSE';
+            confidence = 0.28;
+            riskScore = 0.96;
+            reasons.push('CRITICAL: Detected Poisoned Evidence Context (hallucinated retention policy ID #000-FAKE)');
+            reasons.push('Risk score spiked to 96% due to unverified authorization signatures');
+          } else {
+            verdict = 'ESCALATE';
+            confidence = 0.45;
+            riskScore = 0.88;
+            reasons.push('WARNING: Cascading Dependency Anomaly detected in downstream service auth cluster');
+            reasons.push('Cost of wrong decision exceeds threshold ($500,000+) under non-reversible state');
+          }
+        } else {
+          verdict = currentScenario ? currentScenario.recommendedVerdict : 'ASK';
+          if (verdict === 'EXECUTE') {
+            confidence = 0.92;
+            riskScore = 0.15;
+            reasons.push('High evidence integrity matching policy rules');
+            reasons.push('Reversibility score acceptable for target scope');
+          } else if (verdict === 'ASK') {
+            confidence = 0.68;
+            riskScore = 0.62;
+            reasons.push('Action affects >100 records or key audience; human verification required');
+            reasons.push('Requester role has elevated permissions but impact is high');
+          } else if (verdict === 'REFUSE') {
+            confidence = 0.35;
+            riskScore = 0.91;
+            reasons.push('Action attempted during peak operating hours with unacceptable blast radius');
+            reasons.push('Cost of failure significantly outweighs operational gain');
+          } else if (verdict === 'ESCALATE') {
+            confidence = 0.52;
+            riskScore = 0.79;
+            reasons.push('High value transaction requested on unverified account (<7 days old)');
+            reasons.push('Requires Security Tier 3 human approval');
+          }
+        }
+
+        const decisionResult = {
+          id: 'LOG-' + Math.floor(1000 + Math.random() * 9000) + '-' + verdict[0],
+          timestamp: new Date().toISOString(),
+          domain: currentDomainObj.name,
+          scenarioTitle: currentScenario ? currentScenario.title : 'Action',
+          actionType: currentScenario ? currentScenario.actionType : 'UNKNOWN',
+          target: currentScenario ? currentScenario.target : 'N/A',
+          params: currentScenario ? currentScenario.params : {},
+          verdict: verdict,
+          confidence: Math.round(confidence * 100) + '%',
+          riskScoreNum: riskScore,
+          riskScore: riskScore > 0.75 ? 'Critical (' + Math.round(riskScore * 100) + '%)' : riskScore > 0.4 ? 'Medium (' + Math.round(riskScore * 100) + '%)' : 'Low (' + Math.round(riskScore * 100) + '%)',
+          reversibility: Math.round(reversibility * 100) + '%',
+          costOfFailure: currentScenario ? currentScenario.costOfFailure : '$0',
+          reasons: reasons,
+          evidenceUsed: currentScenario && currentScenario.evidence ? currentScenario.evidence.slice(0, evidenceCount) : [],
+          isFailureTest: isFailureTestInjected,
+          status: verdict === 'EXECUTE' ? 'AUTO_APPROVED' : verdict === 'REFUSE' ? 'REJECTED' : 'PENDING_HUMAN'
+        };
+
+        setActiveDecision(decisionResult);
+        setAuditTrail(prev => [decisionResult, ...prev]);
+      };
+
+      const handleNextDemoStep = () => {
+        if (demoStep === 0) {
+          setSelectedDomain('customer_data');
+          setSelectedScenarioId('sc_del_500');
+          setDemoStep(1);
+        } else if (demoStep === 1) {
+          setIsFailureTestInjected(true);
+          setFailureTestType('POISONED_CONTEXT');
+          setDemoStep(2);
+        } else if (demoStep === 2) {
+          evaluateProposedAction();
+          setDemoStep(3);
+        } else if (demoStep === 3) {
+          setDemoMode(false);
+          setDemoStep(0);
+        }
+      };
+
+      const getVerdictBadge = (verdict) => {
+        switch(verdict) {
+          case 'EXECUTE': return { bg: 'bg-emerald-500/10', border: 'border-emerald-500/40', text: 'text-emerald-400', icon: 'check-circle' };
+          case 'ASK': return { bg: 'bg-amber-500/10', border: 'border-amber-500/40', text: 'text-amber-400', icon: 'help-circle' };
+          case 'DEFER': return { bg: 'bg-blue-500/10', border: 'border-blue-500/40', text: 'text-blue-400', icon: 'clock' };
+          case 'ESCALATE': return { bg: 'bg-orange-500/10', border: 'border-orange-500/40', text: 'text-orange-400', icon: 'alert-triangle' };
+          case 'REFUSE': return { bg: 'bg-red-500/10', border: 'border-red-500/40', text: 'text-red-400', icon: 'x-circle' };
+          default: return { bg: 'bg-slate-800', border: 'border-slate-700', text: 'text-slate-300', icon: 'minus' };
+        }
+      };
+
+      return (
+        <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+
+          {/* --- TOP HEADER & BADGE NAVBAR --- */}
+          <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 border-b border-slate-800">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 to-blue-600 flex items-center justify-center text-slate-950 font-bold shadow-lg shadow-cyan-500/20">
+                <i data-lucide="shield-check" className="w-6 h-6 text-white"></i>
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl font-bold tracking-tight text-white">Gatekeeper AI</h1>
+                  <span className="code-font text-xs text-cyan-400 bg-cyan-950/60 border border-cyan-800/60 px-2 py-0.5 rounded-full">
+                    v2.4 Decision Engine
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400">Autonomous Safety, Risk & Escalation Control Layer</p>
+              </div>
+            </div>
+
+            {/* DOO Builders League Badge & Action Buttons */}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2 bg-gradient-to-r from-purple-900/40 to-slate-900 border border-purple-500/30 px-3 py-1.5 rounded-lg">
+                <i data-lucide="award" className="w-4 h-4 text-purple-400"></i>
+                <div className="text-left">
+                  <div className="text-[10px] text-purple-300 uppercase tracking-wider font-bold">DOO Builders League</div>
+                  <div className="text-xs font-semibold text-white">Decision Architect Badge</div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowArchModal(true)}
+                className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-200 transition"
+              >
+                <i data-lucide="network" className="w-4 h-4 text-cyan-400"></i>
+                Architecture Snapshot
+              </button>
+
+              <button
+                onClick={() => {
+                  setDemoMode(!demoMode);
+                  if (!demoMode) setDemoStep(0);
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition border ${
+                  demoMode 
+                    ? 'bg-amber-500 text-slate-950 border-amber-400 font-bold animate-pulse' 
+                    : 'bg-cyan-950/60 hover:bg-cyan-900/60 text-cyan-300 border-cyan-700/60'
+                }`}
+              >
+                <i data-lucide="play-circle" className="w-4 h-4"></i>
+                {demoMode ? 'Exit Walkthrough' : '90s Demo Walkthrough'}
+              </button>
+            </div>
+          </header>
+
+          {/* --- DEMO WALKTHROUGH BANNER (If Active) --- */}
+          {demoMode && (
+            <div className="bg-gradient-to-r from-amber-950/80 via-slate-900 to-amber-950/80 border border-amber-500/50 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center font-bold text-sm">
+                  {demoStep + 1}
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-amber-300">
+                    {demoStep === 0 && 'Step 1: Select High-Impact Proposed Action'}
+                    {demoStep === 1 && 'Step 2: Inject Deliberate Safety Failure Edge Case'}
+                    {demoStep === 2 && 'Step 3: Trigger Real-time Signal Engine Evaluation'}
+                    {demoStep === 3 && 'Step 4: Review Decision Output & Audit Trail'}
+                  </h4>
+                  <p className="text-xs text-slate-300">
+                    {demoStep === 0 && 'Notice the proposed action: Deleting 500 records on live production DB.'}
+                    {demoStep === 1 && 'Click "Next Step" to simulate a hallucinated or poisoned policy context.'}
+                    {demoStep === 2 && 'Gatekeeper AI evaluates confidence, risk, reversibility, and context.'}
+                    {demoStep === 3 && 'Engine detected safety anomaly and REFUSED destructive execution automatically.'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleNextDemoStep}
+                className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1 shrink-0"
+              >
+                {demoStep === 3 ? 'Finish Demo' : 'Next Demo Step'}
+                <i data-lucide="arrow-right" className="w-4 h-4"></i>
+              </button>
+            </div>
+          )}
+
+          {/* --- DOMAIN SWITCHER STRIP --- */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {DOMAINS.map(domain => {
+              const isActive = selectedDomain === domain.id;
+              return (
+                <button
+                  key={domain.id}
+                  onClick={() => {
+                    setSelectedDomain(domain.id);
+                    setSelectedScenarioId(domain.scenarios[0].id);
+                  }}
+                  className={`p-3 rounded-xl border text-left transition flex items-center gap-3 ${
+                    isActive 
+                      ? 'bg-cyan-950/40 border-cyan-500/60 text-white shadow-lg shadow-cyan-950/50 ring-1 ring-cyan-500/30' 
+                      : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                  }`}
+                >
+                  <div className={`p-2 rounded-lg ${isActive ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`}>
+                    <i data-lucide={domain.icon} className="w-4 h-4"></i>
+                  </div>
+                  <div className="truncate">
+                    <div className="text-xs font-bold truncate">{domain.name}</div>
+                    <div className="text-[10px] text-slate-400">{domain.scenarios.length} Pre-loaded Action{domain.scenarios.length > 1 ? 's' : ''}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* --- MAIN WORKSPACE GRID --- */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+            {/* LEFT PANEL: PROPOSED ACTION CONFIGURATOR (5 Cols) */}
+            <div className="lg:col-span-5 bg-slate-900/80 border border-slate-800 rounded-2xl p-5 space-y-5 flex flex-col justify-between">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <i data-lucide="terminal" className="w-4 h-4 text-cyan-400"></i>
+                    <h2 className="text-sm font-bold text-slate-200">Proposed Action Configurator</h2>
+                  </div>
+                  <span className="text-[10px] code-font text-slate-400 uppercase">Input Payload</span>
+                </div>
+
+                {/* Scenario Selector */}
+                <div>
+                  <label className="text-xs font-medium text-slate-400 block mb-1.5">Preset Action Scenario</label>
+                  <select
+                    value={selectedScenarioId}
+                    onChange={(e) => setSelectedScenarioId(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
+                  >
+                    {currentDomainObj.scenarios.map(sc => (
+                      <option key={sc.id} value={sc.id}>{sc.title}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Context Payload Box */}
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-2.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400 font-medium">Action Type:</span>
+                    <span className="code-font text-cyan-300 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-800/40">
+                      {currentScenario.actionType}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400 font-medium">Target Entity:</span>
+                    <span className="code-font text-slate-200">{currentScenario.target}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400 font-medium">Cost of Failure:</span>
+                    <span className="text-red-400 font-medium text-right text-[11px]">{currentScenario.costOfFailure}</span>
+                  </div>
+                  <div className="text-xs text-slate-400 pt-1 border-t border-slate-800">
+                    <span className="font-semibold text-slate-300">Context: </span>
+                    {currentScenario.description}
+                  </div>
+                </div>
+
+                {/* Metadata Tuning Controls */}
+                <div className="space-y-3 pt-1">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[11px] font-medium text-slate-400 block mb-1">Requestor Identity</label>
+                      <input
+                        type="text"
+                        value={requesterRole}
+                        onChange={(e) => setRequesterRole(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs code-font text-slate-300 focus:border-cyan-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium text-slate-400 block mb-1">Attached Evidence Docs</label>
+                      <select
+                        value={evidenceCount}
+                        onChange={(e) => setEvidenceCount(Number(e.target.value))}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-300"
+                      >
+                        <option value={1}>1 Document (Weak)</option>
+                        <option value={2}>2 Verified Docs (Standard)</option>
+                        <option value={3}>3 Multi-Source Docs (Strong)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between text-[11px] text-slate-400 mb-1">
+                      <span>Action Reversibility Index:</span>
+                      <span className="code-font text-cyan-400">{Math.round(currentScenario.reversibility * 100)}%</span>
+                    </div>
+                    <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800">
+                      <div 
+                        className={`h-full transition-all duration-300 ${
+                          currentScenario.reversibility > 0.6 ? 'bg-emerald-500' : currentScenario.reversibility > 0.3 ? 'bg-amber-500' : 'bg-red-500'
+                        }`}
+                        style={{ width: `${currentScenario.reversibility * 100}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* DELIBERATE FAILURE TEST INJECTOR BOX */}
+                <div className={`p-3.5 rounded-xl border transition-all ${
+                  isFailureTestInjected 
+                    ? 'bg-red-950/30 border-red-500/60 shadow-lg shadow-red-950/40' 
+                    : 'bg-slate-950 border-slate-800'
+                }`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <i data-lucide="bug" className={`w-4 h-4 ${isFailureTestInjected ? 'text-red-400' : 'text-slate-400'}`}></i>
+                      <span className="text-xs font-bold text-slate-200">Inject Failure Test Edge Case</span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={isFailureTestInjected} 
+                        onChange={(e) => setIsFailureTestInjected(e.target.checked)} 
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-600"></div>
+                    </label>
+                  </div>
+
+                  {isFailureTestInjected && (
+                    <div className="space-y-2 pt-1">
+                      <select
+                        value={failureTestType}
+                        onChange={(e) => setFailureTestType(e.target.value)}
+                        className="w-full bg-slate-900 border border-red-800/60 rounded-lg p-1.5 text-xs text-red-200"
+                      >
+                        <option value="POISONED_CONTEXT">Poisoned Evidence / Fake Retention Policy</option>
+                        <option value="CASCADING_HALLUCINATION">Cascading Dependency Auth Anomaly</option>
+                      </select>
+                      <p className="text-[11px] text-red-300/80 leading-relaxed">
+                        Injects malicious/hallucinated context payload to test if Gatekeeper AI correctly flags low confidence and halts execution.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Evaluate Button */}
+              <button
+                onClick={evaluateProposedAction}
+                disabled={isEvaluating}
+                className="w-full mt-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold py-3 px-4 rounded-xl shadow-lg shadow-cyan-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isEvaluating ? (
+                  <>
+                    <i data-lucide="loader" className="w-4 h-4 animate-spin"></i>
+                    Evaluating Safety Signals ({evaluationProgress}%)...
+                  </>
+                ) : (
+                  <>
+                    <i data-lucide="cpu" className="w-4 h-4"></i>
+                    Evaluate Action with Gatekeeper
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* RIGHT PANEL: REAL-TIME SIGNAL PIPELINE & DECISION OUTPUT (7 Cols) */}
+            <div className="lg:col-span-7 space-y-6">
+
+              {/* SIGNAL PIPELINE & PROCESSING */}
+              <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <i data-lucide="activity" className="w-4 h-4 text-cyan-400"></i>
+                    <h2 className="text-sm font-bold text-slate-200">5-Signal Safety Engine Evaluation</h2>
+                  </div>
+                  <span className="text-[10px] code-font text-slate-400">Real-Time Assessment</span>
+                </div>
+
+                {/* 5 Signals Visualizer */}
+                <div className="grid grid-cols-1 sm:grid-cols-5 gap-2.5">
+                  {[
+                    { label: 'Confidence', val: activeDecision ? activeDecision.confidence : '92%', status: 'high' },
+                    { label: 'Risk Score', val: activeDecision ? activeDecision.riskScore : 'Low (15%)', status: activeDecision?.riskScoreNum > 0.7 ? 'danger' : 'safe' },
+                    { label: 'Reversibility', val: `${Math.round(currentScenario.reversibility * 100)}%`, status: currentScenario.reversibility < 0.3 ? 'warn' : 'safe' },
+                    { label: 'Evidence', val: `${evidenceCount} Verified`, status: evidenceCount > 1 ? 'safe' : 'warn' },
+                    { label: 'Cost Failure', val: currentScenario.costOfFailure.split(' ')[0], status: 'info' }
+                  ].map((sig, idx) => (
+                    <div key={idx} className="bg-slate-950 border border-slate-800/80 rounded-xl p-2.5 text-center space-y-1">
+                      <div className="text-[10px] text-slate-400 font-medium">{sig.label}</div>
+                      <div className={`text-xs font-bold code-font ${
+                        sig.status === 'danger' ? 'text-red-400' : sig.status === 'warn' ? 'text-amber-400' : 'text-cyan-300'
+                      }`}>
+                        {sig.val}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Progress bar during evaluation */}
+                {isEvaluating && (
+                  <div className="w-full bg-slate-950 rounded-full h-1.5 overflow-hidden border border-slate-800">
+                    <div 
+                      className="bg-cyan-500 h-full transition-all duration-200"
+                      style={{ width: `${evaluationProgress}%` }}
+                    ></div>
+                  </div>
+                )}
+              </div>
+
+              {/* DECISION OUTPUT CARD */}
+              {activeDecision ? (
+                <div className={`p-6 rounded-2xl border backdrop-blur-md shadow-2xl space-y-5 transition-all ${
+                  getVerdictBadge(activeDecision.verdict).bg
+                } ${getVerdictBadge(activeDecision.verdict).border}`}>
+                  
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
+                    <div>
+                      <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold block mb-1">
+                        Gatekeeper AI Final Verdict
+                      </span>
+                      <div className="flex items-center gap-3">
+                        <span className={`text-2xl font-black code-font ${getVerdictBadge(activeDecision.verdict).text}`}>
+                          {activeDecision.verdict}
+                        </span>
+                        {activeDecision.isFailureTest && (
+                          <span className="bg-red-950 text-red-300 border border-red-800 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                            Edge Case Triggered
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <div className="text-xs text-slate-400">Execution Status</div>
+                      <div className="text-xs font-bold code-font text-slate-200">{activeDecision.status}</div>
+                    </div>
+                  </div>
+
+                  {/* Decision Matrix Reasoning */}
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                      <i data-lucide="git-commit" className="w-3.5 h-3.5 text-cyan-400"></i>
+                      Decision Logic & Context Signals:
+                    </h4>
+                    <ul className="space-y-1.5 pl-2">
+                      {activeDecision.reasons.map((r, i) => (
+                        <li key={i} className="text-xs text-slate-300 flex items-start gap-2">
+                          <span className="text-cyan-400 font-bold">•</span>
+                          <span>{r}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {/* Interactive Human-In-The-Loop Overrides (For ASK / ESCALATE / REFUSE) */}
+                  {activeDecision.verdict !== 'EXECUTE' && (
+                    <div className="pt-3 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-950/60 p-3.5 rounded-xl">
+                      <div className="text-xs">
+                        <span className="font-bold text-slate-200 block">Human Oversight Intervention Required</span>
+                        <span className="text-slate-400 text-[11px]">Override Gatekeeper engine decision?</span>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <button
+                          onClick={() => setHumanOverride('APPROVED_BY_HUMAN')}
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition"
+                        >
+                          Approve Execution
+                        </button>
+                        <button
+                          onClick={() => setHumanOverride('REJECTED_BY_HUMAN')}
+                          className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition"
+                        >
+                          Reject Action
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {humanOverride && (
+                    <div className="text-center text-xs font-bold py-2 rounded-lg bg-slate-950 border border-slate-700 text-cyan-300">
+                      Human Intervention Logged: {humanOverride}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-slate-900/40 border border-slate-800/60 rounded-2xl p-12 text-center space-y-3">
+                  <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center mx-auto text-slate-500">
+                    <i data-lucide="shield" className="w-6 h-6"></i>
+                  </div>
+                  <h3 className="text-sm font-bold text-slate-300">Ready to Evaluate Action</h3>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                    Select a scenario or customize parameters on the left, then trigger the decision engine.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* --- IMMUTABLE AUDIT TRAIL LOG VIEWER --- */}
+          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <i data-lucide="history" className="w-4 h-4 text-cyan-400"></i>
+                <h2 className="text-sm font-bold text-slate-200">Immutable Audit Trail & Decision Logs</h2>
+              </div>
+              <span className="text-[10px] code-font text-slate-400">{auditTrail.length} Recorded Entries</span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 text-slate-400 code-font text-[11px]">
+                    <th className="py-2.5 px-3">Log ID</th>
+                    <th className="py-2.5 px-3">Timestamp</th>
+                    <th className="py-2.5 px-3">Domain</th>
+                    <th className="py-2.5 px-3">Proposed Action</th>
+                    <th className="py-2.5 px-3">Verdict</th>
+                    <th className="py-2.5 px-3">Risk Score</th>
+                    <th className="py-2.5 px-3 text-right">Details</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                  {auditTrail.map((log) => {
+                    const badge = getVerdictBadge(log.verdict);
+                    return (
+                      <tr key={log.id} className="hover:bg-slate-800/40 transition">
+                        <td className="py-3 px-3 code-font text-cyan-400 font-medium">{log.id}</td>
+                        <td className="py-3 px-3 code-font text-slate-400 text-[11px]">
+                          {log.timestamp.split('T')[1].slice(0, 8)}
+                        </td>
+                        <td className="py-3 px-3 font-medium text-slate-200">{log.domain}</td>
+                        <td className="py-3 px-3 font-medium text-slate-100">{log.scenarioTitle || log.action}</td>
+                        <td className="py-3 px-3">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold code-font ${badge.bg} ${badge.text} border ${badge.border}`}>
+                            {log.verdict}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 code-font">{log.riskScore}</td>
+                        <td className="py-3 px-3 text-right">
+                          <button
+                            onClick={() => setSelectedAuditLog(log)}
+                            className="text-cyan-400 hover:text-cyan-300 underline text-[11px]"
+                          >
+                            View JSON
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* --- DOO BUILDERS LEAGUE DELIVERABLES SUITE --- */}
+          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+              <div>
+                <h2 className="text-base font-bold text-white flex items-center gap-2">
+                  <i data-lucide="file-check-2" className="w-5 h-5 text-cyan-400"></i>
+                  DOO Builders League Submission Deliverables
+                </h2>
+                <p className="text-xs text-slate-400">Decision Architect Mission - Evaluation Documents</p>
+              </div>
+
+              {/* Deliverable Tabs */}
+              <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
+                <button
+                  onClick={() => setShowDeliverablesTab('failure')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                    showDeliverablesTab === 'failure' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Failure Test Analysis
+                </button>
+                <button
+                  onClick={() => setShowDeliverablesTab('thesis')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                    showDeliverablesTab === 'thesis' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  2-Year Thesis (&le;300 Words)
+                </button>
+                <button
+                  onClick={() => setShowDeliverablesTab('script')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                    showDeliverablesTab === 'script' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  90s Walkthrough Script
+                </button>
+              </div>
+            </div>
+
+            {/* TAB CONTENT: FAILURE ANALYSIS */}
+            {showDeliverablesTab === 'failure' && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
+                  <i data-lucide="alert-octagon" className="w-4 h-4"></i>
+                  Deliberate Failure Test: Poisoned Evidence & Dependency Anomaly
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                  <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
+                    <h4 className="font-bold text-slate-200">1. The Attack Vector</h4>
+                    <p className="text-slate-400 leading-relaxed">
+                      An agent receives a prompt to bulk-delete customer records, attaching a synthetic JSON retention doc containing a fake DPO approval signature (`#000-FAKE`).
+                    </p>
+                  </div>
+                  <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
+                    <h4 className="font-bold text-slate-200">2. Signal Detection</h4>
+                    <p className="text-slate-400 leading-relaxed">
+                      Gatekeeper AI checks evidence cryptographic signatures against trusted key vaults. Detection fails policy checksum, dropping confidence from 94% to 28%.
+                    </p>
+                  </div>
+                  <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
+                    <h4 className="font-bold text-slate-200">3. System Safety Outcome</h4>
+                    <p className="text-slate-400 leading-relaxed">
+                      Action automatically downgraded to <strong>REFUSE</strong> or <strong>ESCALATE</strong>. Execution is blocked before database write operation executes.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB CONTENT: 2-YEAR THESIS */}
+            {showDeliverablesTab === 'thesis' && (
+              <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-3">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-sm font-bold text-cyan-300">The Trust Layer of Autonomous Work</h3>
+                  <span className="text-[10px] code-font text-slate-500">284 Words</span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed space-y-2">
+                  Over the next two years, the fundamental bottleneck in enterprise AI adoption will shift from <em>model intelligence</em> to <em>decision governance</em>. LLMs can draft code, compose emails, and generate database queries with remarkable fluency—yet giving them unconstrained execution authority remains an existential operational hazard.
+                  <br /><br />
+                  The future belongs to explicit, deterministic decision engines positioned between autonomous AI agents and execution runtimes. These "Gatekeeper Layers" do not rely on standard prompt steering. Instead, they operate as mathematical evaluation checkpoints, evaluating five non-negotiable vectors before every action: statistical confidence, blast radius risk, cryptographic evidence integrity, action reversibility, and the monetary cost of being wrong.
+                  <br /><br />
+                  By 2028, autonomous agents will not be judged by how many tools they call, but by how reliably they know when <strong>not</strong> to act. Decision architectures will evolve from rule engines into real-time risk-priced clearinghouses—turning raw LLM capabilities into enterprise-grade reliable systems.
+                </p>
+              </div>
+            )}
+
+            {/* TAB CONTENT: 90S WALKTHROUGH SCRIPT */}
+            {showDeliverablesTab === 'script' && (
+              <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-3 text-xs">
+                <div className="font-bold text-slate-200">90-Second Loom Walkthrough Script:</div>
+                <ol className="list-decimal pl-4 space-y-2 text-slate-300 leading-relaxed">
+                  <li><strong>0:00 - 0:15:</strong> "Welcome! This is Gatekeeper AI—the decision engine layer preventing dangerous agent execution."</li>
+                  <li><strong>0:15 - 0:40:</strong> "Here, an automated agent wants to delete 500 customer records. Rather than executing blindly, Gatekeeper intercepts the action."</li>
+                  <li><strong>0:40 - 1:00:</strong> "We inject a deliberate failure test—a poisoned evidence context. Gatekeeper evaluates 5 real-time signals."</li>
+                  <li><strong>1:00 - 1:30:</strong> "Confidence drops to 28%, risk hits Critical, and Gatekeeper REFUSES execution, saving the database and logging to the audit trail."</li>
+                </ol>
+              </div>
+            )}
+          </div>
+
+          {/* --- MODAL 1: ARCHITECTURE SNAPSHOT --- */}
+          {showArchModal && (
+            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-3xl w-full p-6 space-y-6 shadow-2xl">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+                  <div className="flex items-center gap-2">
+                    <i data-lucide="network" className="w-5 h-5 text-cyan-400"></i>
+                    <h3 className="text-base font-bold text-white">System Architecture Snapshot</h3>
+                  </div>
+                  <button onClick={() => setShowArchModal(false)} className="text-slate-400 hover:text-white">
+                    <i data-lucide="x" className="w-5 h-5"></i>
+                  </button>
+                </div>
+
+                {/* Architecture Diagram Box */}
+                <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-3 text-center text-xs font-bold">
+                    <div className="bg-slate-900 border border-cyan-800/60 p-3 rounded-lg text-cyan-300">
+                      1. Agent Input
+                      <div className="text-[10px] font-normal text-slate-400 mt-1">Proposed Action + Context</div>
+                    </div>
+                    <div className="bg-slate-900 border border-blue-800/60 p-3 rounded-lg text-blue-300">
+                      2. Signals
+                      <div className="text-[10px] font-normal text-slate-400 mt-1">Risk, Reversibility, Cost</div>
+                    </div>
+                    <div className="bg-slate-900 border border-purple-800/60 p-3 rounded-lg text-purple-300">
+                      3. Decision Engine
+                      <div className="text-[10px] font-normal text-slate-400 mt-1">Matrix Rules Evaluation</div>
+                    </div>
+                    <div className="bg-slate-900 border border-emerald-800/60 p-3 rounded-lg text-emerald-300">
+                      4. Verdict
+                      <div className="text-[10px] font-normal text-slate-400 mt-1">Execute / Ask / Refuse</div>
+                    </div>
+                    <div className="bg-slate-900 border border-amber-800/60 p-3 rounded-lg text-amber-300">
+                      5. Audit
+                      <div className="text-[10px] font-normal text-slate-400 mt-1">Immutable Log Payload</div>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Gatekeeper AI sits between AI Agents and core API execution runtimes. Actions are evaluated across 5 quantitative safety vectors before authorization tokens are granted.
+                  </p>
+                </div>
+
+                <div className="text-right">
+                  <button
+                    onClick={() => setShowArchModal(false)}
+                    className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-xs font-bold"
+                  >
+                    Close Snapshot
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* --- MODAL 2: JSON AUDIT LOG DETAIL --- */}
+          {selectedAuditLog && (
+            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <span className="text-sm font-bold code-font text-cyan-400">Payload Detail: {selectedAuditLog.id}</span>
+                  <button onClick={() => setSelectedAuditLog(null)} className="text-slate-400 hover:text-white">
+                    <i data-lucide="x" className="w-5 h-5"></i>
+                  </button>
+                </div>
+
+                <pre className="bg-slate-950 p-4 rounded-xl border border-slate-800 code-font text-[11px] text-cyan-300 overflow-x-auto max-h-96">
+                  {JSON.stringify(selectedAuditLog, null, 2)}
+                </pre>
+
+                <div className="text-right">
+                  <button
+                    onClick={() => setSelectedAuditLog(null)}
+                    className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-xs font-bold"
+                  >
+                    Close Payload
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+</body>
+</html>
